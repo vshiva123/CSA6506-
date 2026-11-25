@@ -1,33 +1,24 @@
-import re
-from collections import Counter
-from math import sqrt
+from sentence_transformers import SentenceTransformer, util
 
-documents = {
-    "Doc1": "Artificial intelligence is used in healthcare.",
-    "Doc2": "Machine learning analyzes data.",
-    "Doc3": "Python is used for programming.",
-    "Doc4": "AI helps doctors identify diseases."
-}
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
+documents = [
+    "AI is used in healthcare.",
+    "Machine learning analyzes data.",
+    "Python is used for programming.",
+    "AI helps doctors identify diseases."
+]
 
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
+doc_embeddings = model.encode(documents)
 
 query = input("Enter search query: ")
-q = embed(query)
+query_embedding = model.encode(query)
 
-results = []
+scores = util.cos_sim(query_embedding, doc_embeddings)
 
-for name, doc in documents.items():
-    score = cosine(q, embed(doc))
-    results.append((name, doc, score))
+results = scores[0].argsort(descending=True)
 
-results.sort(key=lambda x: x[2], reverse=True)
+print("\nSearch Results:")
 
-for name, doc, score in results:
-    print(name, doc, round(score, 3))
+for i in results:
+    print(documents[i], round(scores[0][i].item(), 3))

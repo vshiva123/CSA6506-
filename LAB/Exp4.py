@@ -1,38 +1,36 @@
-import re
-from collections import Counter
-from math import sqrt
+import chromadb
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+client = chromadb.Client()
+
+collection = client.create_collection("documents")
 
 documents = [
-    "Water is essential for life.",
-    "Smart systems monitor water flow.",
-    "Leak detection reduces water loss.",
-    "AI supports automation.",
-    "Machine learning analyzes data."
+    "Artificial intelligence makes machines intelligent.",
+    "Python is a programming language.",
+    "Machine learning learns from data.",
+    "Generative AI creates new content."
 ]
 
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
+embeddings = model.encode(documents).tolist()
 
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
+collection.add(
+    documents=documents,
+    embeddings=embeddings,
+    ids=["1", "2", "3", "4"]
+)
 
 query = input("Enter query: ")
-k = int(input("Enter K value: "))
+query_embedding = model.encode([query]).tolist()
 
-q = embed(query)
+results = collection.query(
+    query_embeddings=query_embedding,
+    n_results=2
+)
 
-results = []
+print("\nTop Retrieved Documents:")
 
-for doc in documents:
-    score = cosine(q, embed(doc))
-    results.append((doc, score))
-
-results.sort(key=lambda x: x[1], reverse=True)
-
-print("\nTop-K Documents:")
-
-for doc, score in results[:k]:
-    print(doc, round(score, 3))
+for doc in results['documents'][0]:
+    print(doc)

@@ -1,39 +1,31 @@
-import re
-from collections import Counter
-from math import sqrt
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 documents = [
     "Python is a programming language.",
     "Artificial intelligence makes machines intelligent.",
     "Machine learning learns from data.",
-    "Water conservation protects resources."
+    "Generative AI creates new content."
 ]
 
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
+embeddings = model.encode(documents)
 
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
+vectors = np.array(embeddings, dtype='float32')
 
-database = []
+index = faiss.IndexFlatL2(vectors.shape[1])
+index.add(vectors)
 
-for doc in documents:
-    database.append((doc, embed(doc)))
+query = input("Enter search query: ")
 
-query = input("Enter query: ")
-q = embed(query)
+q = model.encode([query])
+q = np.array(q, dtype='float32')
 
-results = []
-
-for doc, vector in database:
-    score = cosine(q, vector)
-    results.append((doc, score))
-
-results.sort(key=lambda x: x[1], reverse=True)
+distances, indices = index.search(q, 2)
 
 print("\nRetrieved Documents:")
-for doc, score in results[:3]:
-    print(doc, round(score, 3))
+
+for i in indices[0]:
+    print(documents[i])

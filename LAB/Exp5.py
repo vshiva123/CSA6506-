@@ -1,34 +1,34 @@
-import re
-from collections import Counter
-from math import sqrt
+from sentence_transformers import SentenceTransformer, util
+from transformers import pipeline
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 documents = [
     "Artificial intelligence enables machines to perform tasks.",
     "Machine learning allows computers to learn from data.",
-    "Water conservation reduces water usage.",
-    "Leak detection identifies damaged pipelines."
+    "Python is a popular programming language.",
+    "Generative AI creates new content."
 ]
 
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
-
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
+embeddings = model.encode(documents)
 
 question = input("Ask a question: ")
-q = embed(question)
 
-best = max(documents, key=lambda d: cosine(q, embed(d)))
-score = cosine(q, embed(best))
+q = model.encode(question)
 
-print("\nRetrieved Context:")
-print(best)
+scores = util.cos_sim(q, embeddings)
 
-print("\nAnswer:")
-if score > 0:
-    print(best)
-else:
-    print("No relevant information found.")
+best = scores.argmax().item()
+
+context = documents[best]
+
+generator = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-small"
+)
+
+prompt = "Answer using this context: " + context + " Question: " + question
+
+answer = generator(prompt, max_new_tokens=100)
+
+print("\nAnswer:", answer[0]['generated_text'])

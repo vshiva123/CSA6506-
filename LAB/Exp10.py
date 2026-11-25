@@ -1,65 +1,44 @@
 import os
-import re
-from collections import Counter
-from math import sqrt
+from sentence_transformers import SentenceTransformer, util
+from transformers import pipeline
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 folder = "documents"
-os.makedirs(folder, exist_ok=True)
-
-sample_files = {
-    "ai.txt": "Artificial intelligence makes machines intelligent.",
-    "python.txt": "Python is a programming language.",
-    "ml.txt": "Machine learning learns from data.",
-    "water.txt": "Smart systems monitor water leakage."
-}
-
-for name, content in sample_files.items():
-    path = os.path.join(folder, name)
-
-    if not os.path.exists(path):
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
-
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
 
 documents = []
+sources = []
 
-for name in os.listdir(folder):
-    if name.endswith(".txt"):
-        with open(os.path.join(folder, name), "r", encoding="utf-8") as f:
-            documents.append((name, f.read()))
+for file in os.listdir(folder):
+    if file.endswith(".txt"):
+        with open(os.path.join(folder, file), "r", encoding="utf-8") as f:
+            text = f.read()
 
-print("Multiple Document AI Assistant")
-print("Type exit to stop.")
+        for sentence in text.split("."):
+            if sentence.strip():
+                documents.append(sentence.strip())
+                sources.append(file)
 
-while True:
-    question = input("\nAsk a question: ")
+embeddings = model.encode(documents)
 
-    if question.lower() == "exit":
-        break
+generator = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-small"
+)
 
-    results = []
+question = input("Ask a question: ")
 
-    for name, content in documents:
-        for sentence in content.split("."):
-            sentence = sentence.strip()
+q = model.encode(question)
 
-            if sentence:
-                score = cosine(embed(question), embed(sentence))
-                results.append((name, sentence, score))
+scores = util.cos_sim(q, embeddings)
 
-    results.sort(key=lambda x: x[2], reverse=True)
+top = scores[0].argmax().item()
 
-    if results and results[0][2] > 0:
-        name, answer, score = results[0]
-        print("Assistant:", answer)
-        print("Source:", name)
-    else:
-        print("Assistant: No relevant information found.")
+context = documents[top]
+
+prompt = "Context: " + context + " Question: " + question
+
+answer = generator(prompt, max_new_tokens=100)
+
+print("\nAssistant:", answer[0]['generated_text'])
+print("Source:", sources[top])

@@ -1,27 +1,34 @@
-import re
-from collections import Counter
-from math import sqrt
+from langchain_core.documents import Document
+from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.llms import HuggingFacePipeline
+from transformers import pipeline
 
 documents = [
-    "Python is a programming language.",
-    "Machine learning learns from data.",
-    "Artificial intelligence makes machines intelligent.",
-    "Generative AI creates new content."
+    Document(page_content="Python is a programming language."),
+    Document(page_content="Machine learning learns from data."),
+    Document(page_content="AI makes machines intelligent."),
+    Document(page_content="Generative AI creates new content.")
 ]
 
-history = []
+embeddings = HuggingFaceEmbeddings(
+    model_name="all-MiniLM-L6-v2"
+)
 
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
+db = Chroma.from_documents(
+    documents,
+    embeddings,
+    collection_name="context_data"
+)
 
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
+generator = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-small"
+)
 
-print("Context-Aware Chatbot")
-print("Type exit to stop.")
+llm = HuggingFacePipeline(pipeline=generator)
+
+history = ""
 
 while True:
     question = input("\nYou: ")
@@ -29,17 +36,18 @@ while True:
     if question.lower() == "exit":
         break
 
-    context = " ".join(history[-2:])
-    query = context + " " + question
+    docs = db.similarity_search(question, k=2)
 
-    q = embed(query)
+    context = " ".join([d.page_content for d in docs])
 
-    best = max(documents, key=lambda x: cosine(q, embed(x)))
-    score = cosine(q, embed(best))
+    prompt = (
+        "Previous conversation: " + history +
+        " Context: " + context +
+        " Question: " + question
+    )
 
-    if score > 0:
-        print("Bot:", best)
-    else:
-        print("Bot: No relevant information found.")
+    answer = llm.invoke(prompt)
 
-    history.append(question)
+    print("Bot:", answer)
+
+    history += " User: " + question + " Bot: " + answer

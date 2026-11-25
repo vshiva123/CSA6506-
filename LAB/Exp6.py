@@ -1,47 +1,42 @@
-import re
-from collections import Counter
-from math import sqrt
+from sentence_transformers import SentenceTransformer, util
+from transformers import pipeline
+
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 documents = [
-    "AI enables machines to perform tasks. AI is used in healthcare.",
-    "Machine learning learns patterns from data. It makes predictions.",
-    "Water management monitors water supply. Leak detection prevents loss."
+    "AI is used in healthcare.",
+    "Machine learning analyzes data.",
+    "Python is a programming language.",
+    "Water conservation saves resources."
 ]
-
-def chunk_text(text):
-    return [s.strip() for s in text.split(".") if s.strip()]
-
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
-
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
 
 chunks = []
 
 for doc in documents:
-    chunks.extend(chunk_text(doc))
+    chunks.extend(doc.split("."))
 
-question = input("Ask a question: ")
-q = embed(question)
+chunks = [c.strip() for c in chunks if c.strip()]
 
-results = sorted(
-    chunks,
-    key=lambda x: cosine(q, embed(x)),
-    reverse=True
+embeddings = model.encode(chunks)
+
+question = input("Enter your question: ")
+
+q = model.encode(question)
+
+scores = util.cos_sim(q, embeddings)
+
+top = scores[0].topk(2).indices.tolist()
+
+context = " ".join([chunks[i] for i in top])
+
+generator = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-small"
 )
 
-print("\nRetrieved Context:")
+prompt = "Context: " + context + " Question: " + question
 
-for item in results[:2]:
-    print(item)
+answer = generator(prompt, max_new_tokens=100)
 
-print("\nGenerated Answer:")
-
-if results and cosine(q, embed(results[0])) > 0:
-    print(results[0])
-else:
-    print("No relevant answer found.")
+print("\nRetrieved Context:", context)
+print("\nGenerated Answer:", answer[0]['generated_text'])

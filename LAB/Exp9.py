@@ -1,38 +1,32 @@
-import re
-from collections import Counter
-from math import sqrt
+from sentence_transformers import SentenceTransformer, util
+from transformers import pipeline
 
-document = """
-Artificial intelligence enables machines to perform tasks.
-Python is a popular programming language.
-Machine learning learns from data.
-Generative AI creates text and images.
-"""
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-sentences = [s.strip() for s in document.split(".") if s.strip()]
+with open("document.txt", "r", encoding="utf-8") as f:
+    text = f.read()
 
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
+documents = [s.strip() for s in text.split(".") if s.strip()]
 
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
+embeddings = model.encode(documents)
 
-print("AI Document Assistant")
-print("Type exit to stop.")
+generator = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-small"
+)
 
-while True:
-    question = input("\nAsk a question: ")
+question = input("Ask a question: ")
 
-    if question.lower() == "exit":
-        break
+q = model.encode(question)
 
-    best = max(sentences, key=lambda x: cosine(embed(question), embed(x)))
-    score = cosine(embed(question), embed(best))
+scores = util.cos_sim(q, embeddings)
 
-    if score > 0:
-        print("Assistant:", best)
-    else:
-        print("Assistant: No matching information found.")
+top = scores[0].argmax().item()
+
+context = documents[top]
+
+prompt = "Context: " + context + " Question: " + question
+
+answer = generator(prompt, max_new_tokens=100)
+
+print("\nAssistant:", answer[0]['generated_text'])

@@ -1,39 +1,39 @@
-import re
-from collections import Counter
-from math import sqrt
+from langchain_core.documents import Document
+from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.llms import HuggingFacePipeline
+from transformers import pipeline
 
-knowledge = [
-    "Water distribution supplies water to different areas.",
-    "Pipelines transport water to consumers.",
-    "Water pressure is important for distribution.",
-    "Leak detection identifies damaged pipelines.",
-    "Sensors monitor water flow and pressure."
+documents = [
+    Document(page_content="Water distribution supplies water to different areas."),
+    Document(page_content="Pipelines transport water to consumers."),
+    Document(page_content="Leak detection identifies damaged pipelines."),
+    Document(page_content="Sensors monitor water flow and pressure.")
 ]
 
-def embed(text):
-    return Counter(re.findall(r"\w+", text.lower()))
+embeddings = HuggingFaceEmbeddings(
+    model_name="all-MiniLM-L6-v2"
+)
 
-def cosine(a, b):
-    dot = sum(a[w] * b[w] for w in set(a) & set(b))
-    na = sqrt(sum(v*v for v in a.values()))
-    nb = sqrt(sum(v*v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0
+db = Chroma.from_documents(
+    documents,
+    embeddings,
+    collection_name="water_knowledge"
+)
 
-print("Water Management Chatbot")
-print("Type exit to stop.")
+generator = pipeline(
+    "text2text-generation",
+    model="google/flan-t5-small"
+)
 
-while True:
-    question = input("\nYou: ")
+llm = HuggingFacePipeline(pipeline=generator)
 
-    if question.lower() == "exit":
-        break
+question = input("Ask a question: ")
 
-    q = embed(question)
+docs = db.similarity_search(question, k=2)
 
-    best = max(knowledge, key=lambda x: cosine(q, embed(x)))
-    score = cosine(q, embed(best))
+context = " ".join([d.page_content for d in docs])
 
-    if score > 0:
-        print("Bot:", best)
-    else:
-        print("Bot: No relevant information found.")
+prompt = "Answer using this information: " + context + " Question: " + question
+
+print("\nChatbot:", llm.invoke(prompt))
